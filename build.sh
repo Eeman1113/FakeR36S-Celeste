@@ -108,7 +108,7 @@ stage_mono() {
     ( cd "$WORK/debs"
       apt-get download \
           mono-runtime:armhf mono-runtime-common:armhf mono-runtime-sgen:armhf \
-          libmonosgen-2.0-1:armhf libmono-corlib4.5-cil \
+          libmonosgen-2.0-1:armhf libmono-corlib4.5-dll \
           libmono-system4.0-cil libmono-system-core4.0-cil \
           libmono-system-xml4.0-cil libmono-system-xml-linq4.0-cil \
           libmono-system-configuration4.0-cil libmono-system-security4.0-cil \
@@ -121,6 +121,9 @@ stage_mono() {
     mkdir -p "$MROOT/bin" "$MROOT/lib"
     find "$MROOT/usr/bin" -maxdepth 1 -type f -exec cp -a {} "$MROOT/bin/" \; 2>/dev/null || true
     cp -a "$MROOT/usr/lib/arm-linux-gnueabihf/." "$MROOT/lib/" 2>/dev/null || true
+    # libmonosgen-2.0.so.1 installs to plain /usr/lib, not the multiarch triplet
+    # directory, so the copy above walks straight past the runtime itself.
+    find "$MROOT/usr/lib" -maxdepth 1 -name '*.so*' -exec cp -a {} "$MROOT/lib/" \; 2>/dev/null || true
     cp -a "$MROOT/usr/lib/mono" "$MROOT/lib/" 2>/dev/null || true
     rm -rf "$MROOT/usr"
     # Belt and braces: mono-runtime-common carries helper binaries and an arch slip
@@ -133,8 +136,15 @@ stage_mono() {
         esac
     done
 
+    # Assert the three pieces without which the runtime cannot start, rather than
+    # shipping a port that fails on the device for a reason we could have caught here.
     [ -x "$MROOT/bin/mono-sgen" ] || [ -x "$MROOT/bin/mono" ] \
         || { echo "!! no mono binary unpacked"; exit 1; }
+    ls "$MROOT"/lib/libmonosgen-2.0.so* >/dev/null 2>&1 \
+        || { echo "!! libmonosgen-2.0.so missing -- mono-sgen will not link"; exit 1; }
+    [ -f "$MROOT/lib/mono/4.5/mscorlib.dll" ] \
+        || { echo "!! mscorlib.dll missing -- the runtime cannot start"; exit 1; }
+    echo "    mono ok: $(ls "$MROOT"/lib/libmonosgen-2.0.so* | head -1 | xargs basename), mscorlib present"
 }
 
 # ---------------------------------------------------------------- package
