@@ -107,7 +107,7 @@ stage_mono() {
     apt-get update -qq
     ( cd "$WORK/debs"
       apt-get download \
-          mono-runtime:armhf mono-runtime-common mono-runtime-sgen:armhf \
+          mono-runtime:armhf mono-runtime-common:armhf mono-runtime-sgen:armhf \
           libmonosgen-2.0-1:armhf libmono-corlib4.5-cil \
           libmono-system4.0-cil libmono-system-core4.0-cil \
           libmono-system-xml4.0-cil libmono-system-xml-linq4.0-cil \
@@ -123,6 +123,16 @@ stage_mono() {
     cp -a "$MROOT/usr/lib/arm-linux-gnueabihf/." "$MROOT/lib/" 2>/dev/null || true
     cp -a "$MROOT/usr/lib/mono" "$MROOT/lib/" 2>/dev/null || true
     rm -rf "$MROOT/usr"
+    # Belt and braces: mono-runtime-common carries helper binaries and an arch slip
+    # in the deb list silently drops an amd64 ELF into the port. Anything that is not
+    # 32-bit ARM goes, since nothing here can execute it anyway.
+    find "$MROOT" -type f | while read -r f; do
+        case $(file -b "$f") in
+            *ELF\ 32-bit*ARM*) ;;
+            *ELF*) echo "    dropping non-ARM binary: ${f#$MROOT/}"; rm -f "$f" ;;
+        esac
+    done
+
     [ -x "$MROOT/bin/mono-sgen" ] || [ -x "$MROOT/bin/mono" ] \
         || { echo "!! no mono binary unpacked"; exit 1; }
 }
