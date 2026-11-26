@@ -72,8 +72,17 @@ stage_gl4es() {
 # gl4es (stage_gl4es) answers it over the system's GLES 2.0.
 stage_fna3d() {
     echo "==> FNA3D $FNA3D_REF + MojoShader (armhf)"
-    [ -d "$WORK/FNA3D" ] || git clone -q --recursive --depth 1 -b "$FNA3D_REF" \
-        https://github.com/FNA-XNA/FNA3D.git "$WORK/FNA3D"
+    if [ ! -d "$WORK/FNA3D" ]; then
+        git clone -q --depth 1 -b "$FNA3D_REF" https://github.com/FNA-XNA/FNA3D.git "$WORK/FNA3D"
+        # Submodules are fetched separately, after rewriting git:// in the checked-in
+        # .gitmodules. The image sets a global insteadOf too; this covers a local run
+        # where that is not configured.
+        sed -i 's|git://github.com/|https://github.com/|g' "$WORK/FNA3D/.gitmodules"
+        git -C "$WORK/FNA3D" submodule sync --recursive
+        git -C "$WORK/FNA3D" submodule update --init --recursive --depth 1
+    fi
+    [ -f "$WORK/FNA3D/MojoShader/mojoshader.c" ] \
+        || { echo "!! MojoShader submodule missing"; exit 1; }
     cmake -S "$WORK/FNA3D" -B "$WORK/b-fna3d" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" \
         -DCMAKE_BUILD_TYPE=Release \

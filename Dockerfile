@@ -27,4 +27,10 @@ ENV CC=arm-linux-gnueabihf-gcc \
     CFLAGS="-O2 -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ftree-vectorize" \
     CXXFLAGS="-O2 -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ftree-vectorize"
 
+# FNA3D 21.03 predates GitHub dropping the git:// protocol in 2022, and its
+# .gitmodules still points MojoShader and Vulkan-Headers at git://. Rewrite the
+# protocol globally so submodule clones resolve.
+RUN git config --global url."https://github.com/".insteadOf "git://github.com/" \
+ && git config --global advice.detachedHead false
+
 WORKDIR /work
