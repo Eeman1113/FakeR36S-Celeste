@@ -17,7 +17,7 @@ WORK="$HERE/work"; OUT="$HERE/out"; LIBS="$WORK/stage/libs"
 # FNA3D contemporary with Celeste 1.4.0.0 (March 2021). The managed FNA3D.dll that
 # ships with the game exposes 96 entry points; a current libFNA3D.so has more and a
 # different struct layout, so the native side is pinned to match rather than guessed.
-FNA3D_REF=${FNA3D_REF:-21.3}
+FNA3D_REF=${FNA3D_REF:-21.03}
 SDL2_REF=${SDL2_REF:-release-2.28.5}
 GL4ES_REF=${GL4ES_REF:-master}
 MONO_SUITE=${MONO_SUITE:-bookworm}
@@ -54,7 +54,7 @@ stage_gl4es() {
         -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" \
         -DCMAKE_BUILD_TYPE=Release \
         -DNOX11=ON -DNOEGL=OFF -DGLX_STUBS=ON -DEGL_WRAPPER=OFF \
-        -DGBM=ON -DDEFAULT_ES=2 -DSTATICLIB=OFF
+        -DGBM=ON -DSTATICLIB=OFF
     cmake --build "$WORK/b-gl4es" -j"$(nproc)"
     find "$WORK/b-gl4es" "$WORK/gl4es/lib" -name 'libGL.so*' -exec cp -P {} "$LIBS/" \; 2>/dev/null || true
     [ -e "$LIBS/libGL.so.1" ] || { echo "!! gl4es produced no libGL.so.1"; exit 1; }

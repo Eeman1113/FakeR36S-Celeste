@@ -1,9 +1,9 @@
 First armhf build of the Celeste port.
 
 Built from scratch for 32-bit ARM: armhf Mono 6.8 (glibc 2.31), SDL2 2.28.5,
-FNA3D 21.3 and MojoShader, all cross-compiled for Cortex-A7. Renders through
-Mesa/Lima's desktop GL 2.1 rather than forcing GLES 3.0 the way the aarch64
-PortMaster port does.
+FNA3D 21.03 and MojoShader, all cross-compiled for Cortex-A7. Renders through
+gl4es, which presents desktop GL 2.1 over the system's GLES 2.0 -- Lima has no
+GLES 3.0, so the route every aarch64 port takes is closed here.
 
 You supply the game and FMOD's armhf libraries — see `gamedata/README-FIRST.txt`.
 
