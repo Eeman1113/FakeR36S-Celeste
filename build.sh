@@ -130,7 +130,10 @@ stage_mono() {
 # ---------------------------------------------------------------- package
 stage_package() {
     echo "==> packaging port v$VERSION"
-    local PKG="$WORK/pkg" PORT="$PKG/ports/celeste"
+    # Split deliberately: in a single `local a=.. b=$a` bash does not yet see a,
+    # and with set -u that is an unbound-variable abort rather than an empty path.
+    local PKG="$WORK/pkg"
+    local PORT="$PKG/ports/celeste"
     rm -rf "$PKG"
     mkdir -p "$PORT/gamedata" "$PORT/libs" "$PORT/savedata" \
              "$PKG/.local/share/applications" "$PKG/.local/share/icons"
