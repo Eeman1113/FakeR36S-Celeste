@@ -1,0 +1,64 @@
+name: Build Celeste port (armhf / A23)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Port version"
+        default: "0.0.1"
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "docs/**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: celeste-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build cross toolchain image
+        run: docker build -t fr36s-celeste .
+
+      - name: Build native stack + package
+        run: |
+          V="${{ github.event.inputs.version || '0.0.1' }}"
+          docker run --rm -v "$PWD:/work" -w /work fr36s-celeste \
+            bash -c "./build.sh $V"
+
+      - name: Verify everything is 32-bit ARM
+        run: |
+          set -e
+          cd out && unzip -q -o celeste-port-*.zip -d verify
+          fail=0
+          for so in $(find verify/ports/celeste/libs verify/ports/celeste/mono/bin -type f 2>/dev/null); do
+            if file "$so" | grep -q ELF; then
+              if file "$so" | grep -q "ELF 32-bit.*ARM"; then
+                echo "ok   $(basename "$so")"
+              else
+                echo "FAIL $(basename "$so"): $(file -b "$so")"; fail=1
+              fi
+            fi
+          done
+          exit $fail
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: celeste-port
+          path: out/*
+
+      - name: Release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ github.event.inputs.version || '0.0.1' }}"
+          gh release create "v$V" out/* --title "Celeste port v$V" --notes-file RELEASE.md || \
+          gh release upload "v$V" out/* --clobber

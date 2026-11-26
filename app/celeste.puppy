@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Celeste
+Comment=Help Madeline survive her inner demons on the way up Celeste Mountain
+Exec=/root/ports/celeste/run.sh
+Icon=celeste
+Categories=Game;
+X-Port-Version=@VERSION@
