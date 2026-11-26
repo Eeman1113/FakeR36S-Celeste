@@ -1,10 +1,10 @@
 # FakeR36S-Celeste
 
-> ✅ **DONE — builds green, v0.0.1 released, ready to install.**
+> ✅ **DONE: builds green, v0.0.1 released, ready to install.**
 >
 > The whole armhf native stack compiles and packages, every shipped binary is
 > verified 32-bit ARM, and Mono's runtime, corlib and config tree are asserted
-> present. **Not yet run on the hardware** — that part needs you and the device.
+> present. **Not yet run on the hardware**: that part needs you and the device.
 > Add the game and FMOD per `gamedata/README-FIRST.txt`, launch, and if it fails,
 > `log.txt` plus the two commands under *Diagnosing a failure* tell us which wall
 > we hit.
@@ -19,17 +19,17 @@ and depends on two things this hardware does not have, so none of it carries ove
 |---|---|---|
 | `mono-6.12.0.122-aarch64` | Cortex-A7, ARMv7, 32-bit only | armhf Mono 6.8, unpacked from Debian bookworm |
 | `FNA3D_OPENGL_FORCE_ES3=1` | Mali-400: GLES 2.0, **no** GLES 3.0 | desktop GL 2.1 via bundled gl4es |
-| ASTC 4x4 texture compression | Mali-400 has no ASTC | nothing yet — see *Known risks* |
+| ASTC 4x4 texture compression | Mali-400 has no ASTC | nothing yet (see *Known risks*) |
 
 ## What actually had to be built
 
 Celeste splits cleanly, and the big half needs no work at all:
 
-**Architecture-neutral, reused untouched (~1.11 GB of 1.2 GB)** — `Celeste.exe`,
+**Architecture-neutral, reused untouched (~1.11 GB of 1.2 GB)**: `Celeste.exe`,
 `FNA.dll`, `FNA3D.dll`, the bundled Mono BCL, and all of `Content/`. These are
 managed CIL and plain data. The game logic already runs on ARM.
 
-**Built here for armhf** — `libSDL2`, `libFNA3D` (MojoShader is static inside it at
+**Built here for armhf**: `libSDL2`, `libFNA3D` (MojoShader is static inside it at
 this release, so there is no separate `libmojoshader.so`), `libGL` via gl4es, plus an
 armhf Mono runtime unpacked from Debian. `libfmod`/`libfmodstudio` come from FMOD's own
 official armhf build, which the player downloads (the licence forbids shipping it).
@@ -40,14 +40,14 @@ official armhf build, which the player downloads (the licence forbids shipping i
 ## Two things that decided the design
 
 **The libc.** The OS is Buildroot and its defconfig names no libc at all, which
-normally means uclibc — and Mono cannot use uclibc. But the OMORI port runs here
+normally means uclibc, and Mono cannot use uclibc. But the OMORI port runs here
 built against `arm-linux-gnueabihf.2.31`, dynamically linked, so the device has
 glibc. Buildroot 2026.08 pins `GLIBC_VERSION = 2.44`, so bookworm's 2.36 is well
 below the floor and binaries built here load there.
 
 **The renderer.** FNA3D needs either desktop GL 2.1 or GLES 3.0. Lima has no
 GLES 3.0, so the ES3 route every aarch64 port takes is closed. Mesa *does* build
-desktop GL — `mesa3d.mk` forces `-Dopengl=true` — but `libGL.so.1` only gets
+desktop GL (`mesa3d.mk` forces `-Dopengl=true`), but `libGL.so.1` only gets
 installed alongside a full X11 stack, because `BR2_PACKAGE_LIBGLVND_DISPATCH_GL`
 depends on `BR2_PACKAGE_XORG7`. Rather than drag Xorg into the rootfs, the port
 carries its own `libGL.so.1`: **gl4es**, presenting GL 2.1 over the system's
@@ -74,7 +74,7 @@ hardware budget is the open question.
   Lima compiles it for Utgard hardware with `mediump`-only fragment precision and
   few varyings. Three translation steps, and the shaders are where it will show.
 
-If RAM is the wall, the next move is an ETC1 + separate-alpha repacker — the
+If RAM is the wall, the next move is an ETC1 + separate-alpha repacker; the
 Mali-400-compatible stand-in for ASTC. That is a real project, not a flag.
 
 ## Diagnosing a failure
@@ -89,7 +89,7 @@ grep -iE "gl|shader|mono|fmod|error|exception" ports/celeste/log.txt | head -40
 
 | What you see | What it means |
 |---|---|
-| Killed, or OOM in `dmesg` | RAM. The expected failure — see *Known risks* |
+| Killed, or OOM in `dmesg` | RAM. The expected failure (see *Known risks*) |
 | GLSL compile or link errors | the shader chain; try `LIBGL_SHADERNOCLEAN=1`, `LIBGL_GL=15` |
 | `TypeLoadException`, missing assembly | BCL mismatch; try `CELESTE_BUNDLED_BCL=1` |
 | missing native entry point | the `FNA3D_REF` pin needs moving |
@@ -98,7 +98,7 @@ grep -iE "gl|shader|mono|fmod|error|exception" ports/celeste/log.txt | head -40
 
 One known soft spot: Mono's `libmono-native.so` wants `libgssapi_krb5.so.2`, which
 the OS does not ship. It is loaded only for Kerberos networking, which Celeste never
-touches, so it should stay harmless — but it is the kind of thing worth knowing
+touches, so it should stay harmless, but it is the kind of thing worth knowing
 before it appears in a log.
 
 ## If RAM is the wall
@@ -111,7 +111,7 @@ the difference between fitting and not.
 
 ## Credits
 
-- [FNA](https://github.com/FNA-XNA/FNA) / [FNA3D](https://github.com/FNA-XNA/FNA3D) — Ethan Lee
-- [JohnnyonFlame](https://github.com/JohnnyonFlame) — the aarch64 PortMaster Celeste
+- [FNA](https://github.com/FNA-XNA/FNA) / [FNA3D](https://github.com/FNA-XNA/FNA3D) by Ethan Lee
+- [JohnnyonFlame](https://github.com/JohnnyonFlame): the aarch64 PortMaster Celeste
   this work learned its shape from
 - Celeste is by [Maddy Makes Games](https://www.celestegame.com/). Buy it.

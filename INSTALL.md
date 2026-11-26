@@ -34,7 +34,7 @@ build's `game/` contents in `gamedata/`, and FMOD's two armhf `.so` files in
 
 Ports → Celeste. Reboot once first if it does not show up.
 
-Everything the run produces goes to `ports/celeste/log.txt` — read that before
+Everything the run produces goes to `ports/celeste/log.txt`; read that before
 reporting anything.
 
 ## Building it yourself
