@@ -80,6 +80,33 @@ mkdir -p "$PORT/savedata/Celeste"
 
 cd "$GAME"
 
+# ---- BCL: the runtime's own, not the game's --------------------------------
+# Celeste ships a MonoKickstart bundle: its own mscorlib and System.* assemblies
+# built for the Mono it was packaged with in 2021. We run Debian's Mono 6.8, and
+# mixing a 6.8 runtime with an older BCL is the known-bad combination -- the
+# working aarch64 port deletes those assemblies outright for the same reason.
+#
+# Moved aside rather than deleted, so nothing of the player's copy is destroyed and
+# CELESTE_BUNDLED_BCL=1 puts it back.
+BCL_ASIDE="$PORT/bcl-bundled"
+if [ "${CELESTE_BUNDLED_BCL:-0}" = "1" ]; then
+    if [ -d "$BCL_ASIDE" ]; then
+        echo "-- restoring the game's bundled BCL on request"
+        cp -a "$BCL_ASIDE/." "$GAME/" 2>/dev/null || true
+    fi
+else
+    if [ ! -d "$BCL_ASIDE" ]; then
+        echo "-- moving the game's bundled BCL aside, using Mono 6.8's own"
+        mkdir -p "$BCL_ASIDE"
+        for f in "$GAME"/System*.dll "$GAME"/mscorlib.dll "$GAME"/Mono.*.dll; do
+            [ -e "$f" ] || continue
+            mv "$f" "$BCL_ASIDE/" 2>/dev/null || true
+        done
+        # FNA.dll, FNA3D.dll, Celeste.exe and Celeste.Content.dll deliberately stay:
+        # the native libFNA3D is pinned to the release that matches them.
+    fi
+fi
+
 # macOS leaves AppleDouble stubs on FAT32 cards; FNA opens them as content and dies.
 # Same breakage that made the GBA ROMs show up as ">_".
 find "$GAME" -name '._*' -delete 2>/dev/null || true

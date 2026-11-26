@@ -23,8 +23,9 @@ Celeste splits cleanly, and the big half needs no work at all:
 `FNA.dll`, `FNA3D.dll`, the bundled Mono BCL, and all of `Content/`. These are
 managed CIL and plain data. The game logic already runs on ARM.
 
-**Built here for armhf** — `libSDL2`, `libFNA3D`, `libmojoshader`, `libGL` (gl4es),
-plus an armhf Mono runtime unpacked from Debian. `libfmod`/`libfmodstudio` come from FMOD's own
+**Built here for armhf** — `libSDL2`, `libFNA3D` (MojoShader is static inside it at
+this release, so there is no separate `libmojoshader.so`), `libGL` via gl4es, plus an
+armhf Mono runtime unpacked from Debian. `libfmod`/`libfmodstudio` come from FMOD's own
 official armhf build, which the player downloads (the licence forbids shipping it).
 
 `Celeste.bin.x86` is dropped entirely: it is only MonoKickstart, and we invoke

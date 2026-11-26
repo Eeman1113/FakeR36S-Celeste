@@ -22,7 +22,8 @@ SDL2_REF=${SDL2_REF:-release-2.28.5}
 GL4ES_REF=${GL4ES_REF:-master}
 MONO_SUITE=${MONO_SUITE:-bookworm}
 
-mkdir -p "$WORK" "$OUT" "$LIBS"
+SDL_PREFIX="$WORK/sdl2-prefix"
+mkdir -p "$WORK" "$OUT" "$LIBS" "$SDL_PREFIX"
 
 # ---------------------------------------------------------------- SDL2
 # Built rather than borrowed: FNA drives SDL directly and the OS's own SDL2 is
@@ -36,9 +37,13 @@ stage_sdl2() {
         -DSDL_SHARED=ON -DSDL_STATIC=OFF \
         -DSDL_KMSDRM=ON -DSDL_OPENGL=ON -DSDL_OPENGLES=ON \
         -DSDL_X11=OFF -DSDL_WAYLAND=OFF -DSDL_VULKAN=OFF \
-        -DSDL_ALSA=ON -DSDL_PULSEAUDIO=OFF
+        -DSDL_ALSA=ON -DSDL_PULSEAUDIO=OFF \
+        -DCMAKE_INSTALL_PREFIX="$SDL_PREFIX"
     cmake --build "$WORK/b-sdl" -j"$(nproc)"
-    cp -P "$WORK/b-sdl"/libSDL2-2.0.so* "$LIBS/"
+    # Installed rather than copied out of the build tree: SDL_config.h and
+    # SDL_revision.h are generated, so FNA3D needs a proper prefix to include from.
+    cmake --install "$WORK/b-sdl" >/dev/null
+    cp -P "$SDL_PREFIX"/lib/libSDL2-2.0.so* "$LIBS/"
 }
 
 # ---------------------------------------------------------------- gl4es (our libGL)
@@ -72,12 +77,13 @@ stage_fna3d() {
     cmake -S "$WORK/FNA3D" -B "$WORK/b-fna3d" -G Ninja \
         -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DSDL2_INCLUDE_DIRS="$WORK/SDL/include" \
-        -DSDL2_LIBRARIES="$LIBS/libSDL2-2.0.so.0"
+        -DSDL2_INCLUDE_DIRS="$SDL_PREFIX/include/SDL2" \
+        -DSDL2_LIBRARIES="$SDL_PREFIX/lib/libSDL2.so"
     cmake --build "$WORK/b-fna3d" -j"$(nproc)"
-    cp -P "$WORK/b-fna3d"/libFNA3D.so* "$LIBS/" 2>/dev/null || true
-    # Older FNA3D builds MojoShader as a separate shared object; newer ones fold it in.
-    cp -P "$WORK/b-fna3d"/libmojoshader.so* "$LIBS/" 2>/dev/null || true
+    cp -P "$WORK/b-fna3d"/libFNA3D.so* "$LIBS/"
+    [ -e "$LIBS/libFNA3D.so.0" ] || { echo "!! no libFNA3D.so.0 produced"; exit 1; }
+    # MojoShader is a static target in FNA3D 21.03 and ends up inside libFNA3D,
+    # so unlike the game's x86 lib/ there is no libmojoshader.so to ship.
 }
 
 # ---------------------------------------------------------------- Mono (armhf)
@@ -87,10 +93,19 @@ stage_fna3d() {
 stage_mono() {
     echo "==> Mono runtime (armhf, Debian $MONO_SUITE)"
     local MROOT="$WORK/stage/mono"; mkdir -p "$MROOT" "$WORK/debs"
+    # The image clears /var/lib/apt/lists to stay small, so re-fetch the index here
+    # or apt-get download has nothing to resolve against.
+    apt-get update -qq
     ( cd "$WORK/debs"
       apt-get download \
           mono-runtime:armhf mono-runtime-common mono-runtime-sgen:armhf \
           libmonosgen-2.0-1:armhf libmono-corlib4.5-cil \
+          libmono-system4.0-cil libmono-system-core4.0-cil \
+          libmono-system-xml4.0-cil libmono-system-xml-linq4.0-cil \
+          libmono-system-configuration4.0-cil libmono-system-security4.0-cil \
+          libmono-system-drawing4.0-cil libmono-system-numerics4.0-cil \
+          libmono-system-data4.0-cil libmono-system-runtime-serialization4.0-cil \
+          libmono-posix4.0-cil libmono-security4.0-cil \
         || { echo "!! apt-get download failed for armhf mono"; exit 1; }
       for d in *.deb; do dpkg-deb -x "$d" "$MROOT"; done )
     # Flatten to the layout run.sh expects: mono/bin, mono/lib.

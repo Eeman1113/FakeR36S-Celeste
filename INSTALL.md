@@ -54,7 +54,15 @@ docker run --rm -v "$PWD:/work" -w /work -e STAGE=fna3d fr36s-celeste ./build.sh
 docker run --rm -v "$PWD:/work" -w /work -e STAGE=mono  fr36s-celeste ./build.sh
 ```
 
-`FNA3D_REF` pins the native FNA3D to the release contemporary with Celeste 1.4.0.0,
+### If it starts and dies
+
+`log.txt` first. Two knobs cover the likely causes:
+
+- **Assembly or entry-point errors.** The port moves the game's bundled `mscorlib`
+  and `System.*` into `bcl-bundled/` on first run and uses Mono 6.8's own BCL
+  instead, which is what the working aarch64 port does. To go back to the game's
+  own set: `CELESTE_BUNDLED_BCL=1`.
+- **A missing native entry point.** `FNA3D_REF` pins the native FNA3D to the release contemporary with Celeste 1.4.0.0,
 because the game's bundled managed `FNA3D.dll` exposes 96 entry points and a current
 `libFNA3D.so` does not match it. If the game starts and immediately dies with a
 missing-entry-point error, that pin is the first thing to move.
