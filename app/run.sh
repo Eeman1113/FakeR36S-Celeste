@@ -52,15 +52,27 @@ export MONO_CONFIG="$GAME/monoconfig"
 export MONO_GC_PARAMS="nursery-size=2m,soft-heap-limit=300m"
 export MONO_THREADS_PER_CPU=1
 
-# Mesa/Lima gives us real desktop GL 2.1 on the Mali-400, which is FNA3D's native
-# path -- so deliberately NO FNA3D_OPENGL_FORCE_ES3 here. Lima has no hardware
-# mipmap generation worth using and discards are cheaper than orphaning.
+# Renderer: FNA3D wants desktop GL 2.1. Lima can render it but the OS ships no
+# libGL.so.1 (Buildroot gates that behind a full X11 stack), so the port carries
+# gl4es as its own libGL and gl4es talks to the system GLES 2.0 underneath.
+# Deliberately NO FNA3D_OPENGL_FORCE_ES3: Lima has no GLES 3.0 at all.
 export FNA3D_OPENGL_FORCE_VBO_DISCARD=1
 export FNA3D_DISABLE_LATEBINDING=1
 export SDL_VIDEODRIVER=kmsdrm
 export SDL_AUDIODRIVER=alsa
-export MESA_GL_VERSION_OVERRIDE=2.1
-export LIBGL_DRI3_DISABLE=1
+export SDL_VIDEO_GL_DRIVER="$PORT/libs/libGL.so.1"
+
+# gl4es tuning for Mali-400 (Utgard):
+#   ES=2/GL=21   present GL 2.1 over GLES 2.0
+#   NPOT=2       Utgard's non-power-of-two support is partial; let gl4es handle it
+#   NOINTOVLHACK keep it quiet and predictable rather than clever
+export LIBGL_ES=2
+export LIBGL_GL=21
+export LIBGL_NPOT=2
+export LIBGL_MIPMAP=3
+export LIBGL_BATCH=10
+export LIBGL_NOBANNER=1
+export LIBGL_SILENTSTUB=1
 
 # Saves live beside the port, not in a HOME that gets reflashed.
 export XDG_DATA_HOME="$PORT/savedata"

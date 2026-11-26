@@ -19,7 +19,8 @@ WORK="$HERE/work"; OUT="$HERE/out"; LIBS="$WORK/stage/libs"
 # different struct layout, so the native side is pinned to match rather than guessed.
 FNA3D_REF=${FNA3D_REF:-21.3}
 SDL2_REF=${SDL2_REF:-release-2.28.5}
-MONO_SUITE=${MONO_SUITE:-bullseye}
+GL4ES_REF=${GL4ES_REF:-master}
+MONO_SUITE=${MONO_SUITE:-bookworm}
 
 mkdir -p "$WORK" "$OUT" "$LIBS"
 
@@ -40,10 +41,30 @@ stage_sdl2() {
     cp -P "$WORK/b-sdl"/libSDL2-2.0.so* "$LIBS/"
 }
 
+# ---------------------------------------------------------------- gl4es (our libGL)
+# FNA3D needs desktop GL 2.1. Mesa/Lima can render it, but Buildroot only installs
+# libGL.so.1 alongside a full X11 stack (BR2_PACKAGE_LIBGLVND_DISPATCH_GL depends on
+# BR2_PACKAGE_XORG7) and this OS has no X11. Rather than drag Xorg into the rootfs,
+# the port carries its own libGL: gl4es, which presents GL 2.1 on top of the system's
+# GLES 2.0. Shipped in libs/, found via LD_LIBRARY_PATH, no OS change at all.
+stage_gl4es() {
+    echo "==> gl4es $GL4ES_REF (armhf) -- our libGL.so.1"
+    [ -d "$WORK/gl4es" ] || git clone -q --depth 1 -b "$GL4ES_REF" https://github.com/ptitSeb/gl4es.git "$WORK/gl4es"
+    cmake -S "$WORK/gl4es" -B "$WORK/b-gl4es" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DNOX11=ON -DNOEGL=OFF -DGLX_STUBS=ON -DEGL_WRAPPER=OFF \
+        -DGBM=ON -DDEFAULT_ES=2 -DSTATICLIB=OFF
+    cmake --build "$WORK/b-gl4es" -j"$(nproc)"
+    find "$WORK/b-gl4es" "$WORK/gl4es/lib" -name 'libGL.so*' -exec cp -P {} "$LIBS/" \; 2>/dev/null || true
+    [ -e "$LIBS/libGL.so.1" ] || { echo "!! gl4es produced no libGL.so.1"; exit 1; }
+}
+
 # ---------------------------------------------------------------- FNA3D (+ MojoShader)
-# No FNA3D_OPENGL_FORCE_ES3 here, unlike every aarch64 PortMaster port: those run the
-# Mali *blob*, which is GLES-only. This OS runs Mesa/Lima, which exposes desktop
-# GL 2.1 on Mali-400 -- exactly FNA3D's native path. No gl4es translation layer.
+# No FNA3D_OPENGL_FORCE_ES3 here, unlike every aarch64 PortMaster port. Those force
+# GLES 3.0 because their Mali blobs are GLES-only; Lima cannot do GLES 3.0 at all, so
+# that route is closed to us. Instead FNA3D takes its native desktop GL 2.1 path and
+# gl4es (stage_gl4es) answers it over the system's GLES 2.0.
 stage_fna3d() {
     echo "==> FNA3D $FNA3D_REF + MojoShader (armhf)"
     [ -d "$WORK/FNA3D" ] || git clone -q --recursive --depth 1 -b "$FNA3D_REF" \
@@ -106,10 +127,11 @@ stage_package() {
 
 case "${STAGE:-all}" in
     sdl2)    stage_sdl2 ;;
+    gl4es)   stage_gl4es ;;
     fna3d)   stage_fna3d ;;
     mono)    stage_mono ;;
     package) stage_package ;;
-    all)     stage_sdl2; stage_fna3d; stage_mono; stage_package ;;
+    all)     stage_sdl2; stage_gl4es; stage_fna3d; stage_mono; stage_package ;;
     *)       echo "unknown STAGE=$STAGE"; exit 1 ;;
 esac
 echo "==> done"
