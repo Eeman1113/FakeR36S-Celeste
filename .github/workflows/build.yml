@@ -48,9 +48,12 @@ jobs:
       - name: Verify everything is 32-bit ARM
         run: |
           set -e
-          cd out && unzip -q -o celeste-port-*.zip -d verify
+          unzip -q -o out/celeste-port-*.zip -d "$RUNNER_TEMP/verify"
+          cd "$RUNNER_TEMP"
           fail=0
-          for so in $(find verify/ports/celeste/libs verify/ports/celeste/mono/bin -type f 2>/dev/null); do
+          # Every file in the port, not just libs/ and mono/bin: the runtime .so
+          # files under mono/lib are just as fatal if one comes out amd64.
+          for so in $(find verify/ports -type f 2>/dev/null); do
             if file "$so" | grep -q ELF; then
               if file "$so" | grep -q "ELF 32-bit.*ARM"; then
                 echo "ok   $(basename "$so")"
@@ -72,5 +75,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="${{ github.event.inputs.version || '0.0.1' }}"
-          gh release create "v$V" out/* --title "Celeste port v$V" --notes-file RELEASE.md || \
-          gh release upload "v$V" out/* --clobber
+          # Explicit file list, never a glob over out/: a stray directory in there
+          # makes the upload fail and leaves a half-created release behind.
+          FILES=$(ls out/celeste-port-*.zip out/celeste-port-*.zip.sha256)
+          gh release view "v$V" >/dev/null 2>&1 \
+            && gh release upload "v$V" $FILES --clobber \
+            || gh release create "v$V" $FILES --title "Celeste port v$V" --notes-file RELEASE.md

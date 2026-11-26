@@ -1,7 +1,13 @@
 # FakeR36S-Celeste
 
-> ⏳ **IN PROGRESS** — build system written, CI iterating. This line becomes
-> ✅ when the port builds and a release is published.
+> ✅ **DONE — builds green, v0.0.1 released, ready to install.**
+>
+> The whole armhf native stack compiles and packages, every shipped binary is
+> verified 32-bit ARM, and Mono's runtime, corlib and config tree are asserted
+> present. **Not yet run on the hardware** — that part needs you and the device.
+> Add the game and FMOD per `gamedata/README-FIRST.txt`, launch, and if it fails,
+> `log.txt` plus the two commands under *Diagnosing a failure* tell us which wall
+> we hit.
 
 Celeste on the fake R36S (GA36-MB, Allwinner A23), packaged as a port for
 [FakeR36S-OS](https://github.com/Eeman1113/FakeR36S-OS).
@@ -70,6 +76,38 @@ hardware budget is the open question.
 
 If RAM is the wall, the next move is an ETC1 + separate-alpha repacker — the
 Mali-400-compatible stand-in for ASTC. That is a real project, not a flag.
+
+## Diagnosing a failure
+
+Everything a run produces goes to `ports/celeste/log.txt`. Two readings narrow it
+down fast, and the first one settles the biggest open question:
+
+```sh
+appctl stop && sleep 2 && free -m     # RAM actually available with ES down
+grep -iE "gl|shader|mono|fmod|error|exception" ports/celeste/log.txt | head -40
+```
+
+| What you see | What it means |
+|---|---|
+| Killed, or OOM in `dmesg` | RAM. The expected failure — see *Known risks* |
+| GLSL compile or link errors | the shader chain; try `LIBGL_SHADERNOCLEAN=1`, `LIBGL_GL=15` |
+| `TypeLoadException`, missing assembly | BCL mismatch; try `CELESTE_BUNDLED_BCL=1` |
+| missing native entry point | the `FNA3D_REF` pin needs moving |
+| `libfmod` not found | FMOD's armhf `.so` files are not in `libs/` |
+| Runs but well under 60 fps | expected on two A7s; next step is cutting effects |
+
+One known soft spot: Mono's `libmono-native.so` wants `libgssapi_krb5.so.2`, which
+the OS does not ship. It is loaded only for Kerberos networking, which Celeste never
+touches, so it should stay harmless — but it is the kind of thing worth knowing
+before it appears in a log.
+
+## If RAM is the wall
+
+The honest next project, not a flag: an **ETC1 + separate-alpha repacker**, the
+Mali-400-compatible stand-in for the ASTC 4x4 compression the aarch64 port relies on.
+ETC1 is 4 bpp against 32 bpp uncompressed and Utgard supports it natively; alpha goes
+in a second plane since ETC1 has none. Roughly a 4x cut in texture memory, which is
+the difference between fitting and not.
 
 ## Credits
 
