@@ -125,6 +125,9 @@ stage_mono() {
     # directory, so the copy above walks straight past the runtime itself.
     find "$MROOT/usr/lib" -maxdepth 1 -name '*.so*' -exec cp -a {} "$MROOT/lib/" \; 2>/dev/null || true
     cp -a "$MROOT/usr/lib/mono" "$MROOT/lib/" 2>/dev/null || true
+    # etc/mono comes out of the debs where run.sh wants it (MONO_CFG_DIR) and only
+    # usr/ gets flattened away, so the config tree needs nothing doing to it --
+    # just checking, below, that it is actually there.
     rm -rf "$MROOT/usr"
     # Belt and braces: mono-runtime-common carries helper binaries and an arch slip
     # in the deb list silently drops an amd64 ELF into the port. Anything that is not
@@ -144,6 +147,8 @@ stage_mono() {
         || { echo "!! libmonosgen-2.0.so missing -- mono-sgen will not link"; exit 1; }
     [ -f "$MROOT/lib/mono/4.5/mscorlib.dll" ] \
         || { echo "!! mscorlib.dll missing -- the runtime cannot start"; exit 1; }
+    [ -f "$MROOT/etc/mono/config" ] \
+        || echo "   (warning: no etc/mono/config -- system dllmaps will be absent)"
     echo "    mono ok: $(ls "$MROOT"/lib/libmonosgen-2.0.so* | head -1 | xargs basename), mscorlib present"
 }
 

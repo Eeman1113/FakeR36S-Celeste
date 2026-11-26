@@ -45,7 +45,11 @@ MONODIR="$PORT/mono"
 export LD_LIBRARY_PATH="$PORT/libs:$MONODIR/lib:${LD_LIBRARY_PATH:-}"
 export PATH="$MONODIR/bin:$PATH"
 export MONO_PATH="$GAME"
-export MONO_CONFIG="$GAME/monoconfig"
+# Mono's own config tree, unpacked from the debs, rather than the game's monoconfig:
+# that file describes MonoKickstart's bundled layout, which we are not using. The
+# fmod/fmodstudio dllmaps Celeste actually needs live in Celeste.exe.config, which
+# the runtime picks up from beside the assembly without being told.
+export MONO_CFG_DIR="$MONODIR/etc"
 
 # Mono on a 2-core A7: the SGen nursery default (4 MB) thrashes; a smaller nursery
 # with more frequent, cheaper collections keeps frame times flatter.
