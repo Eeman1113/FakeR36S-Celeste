@@ -22,7 +22,7 @@ APPCTL=/usr/local/bin/appctl
 # it to stop the launcher and start us again in the application cgroup, and when
 # the game exits its on_exit handler brings EmulationStation back unprompted, so
 # there is nothing to restore on the way out either.
-if [ "${CELESTE_STAGE:-1}" = 1 ]; then
+if [ "${1:-}" != --stage2 ]; then
     {
         echo "=== Celeste $(date) ==="
         if [ ! -f "$GAME/Celeste.exe" ]; then
@@ -32,12 +32,20 @@ if [ "${CELESTE_STAGE:-1}" = 1 ]; then
         echo "-- handing off to appd so EmulationStation can be closed"
     } > "$LOG" 2>&1
     [ -f "$GAME/Celeste.exe" ] || exit 1
-    exec "$APPCTL" launch-application "env CELESTE_STAGE=2 $PORT/run.sh"
+
+    # The redirect is part of the command string on purpose. appd runs the app as
+    # `su -l -s /bin/sh player -c "<cmd>"` with stdout going to a tmpfs log under
+    # /dev/shm, which does not survive the power going off -- so the first attempt
+    # failed with nothing on the card to say why. Redirecting inside the string
+    # means even "not found" or "permission denied" from the shell itself is
+    # written to the card before our script gets a chance to run.
+    exec "$APPCTL" launch-application "$PORT/run.sh --stage2 >>$PORT/log.txt 2>&1"
 fi
 
 # ---- stage 2: we are the application now --------------------------------
-exec >> "$LOG" 2>&1
-echo "-- stage 2: running as the application, EmulationStation is down"
+# stdout/stderr are already pointed at the card by the handoff above.
+echo "-- stage 2 alive: uid=$(id -u 2>/dev/null) pwd=$(pwd) shell=${0}"
+echo "-- EmulationStation is down"
 
 # Full clocks. The battery-saver profile caps at 816 MHz, which is what froze
 # FCEUmm; Celeste on two Cortex-A7s has nothing to spare.

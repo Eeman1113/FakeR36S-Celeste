@@ -1,8 +1,9 @@
-[Desktop Entry]
-Type=Application
-Name=Celeste
-Comment=Help Madeline survive her inner demons on the way up Celeste Mountain
-Exec=/root/ports/celeste/run.sh
-Icon=celeste
-Categories=Game;
-X-Port-Version=@VERSION@
+# Celeste for FakeR36S-OS (github.com/Eeman1113/FakeR36S-Celeste); build.sh fills in the version.
+# Bring your own copy: the game's files go in ports/celeste/gamedata/.
+[ENTRY]
+CATEGORY=Ports
+NAME=Celeste
+DESCRIPTION=Help Madeline up the mountain. From your own DRM-free Linux copy.
+COMMAND=/home/player/ports/celeste/run.sh
+ICON=/home/player/.local/share/icons/celeste.png
+VERSION=@VERSION@
