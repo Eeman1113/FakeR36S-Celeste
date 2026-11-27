@@ -29,17 +29,28 @@ if [ "${1:-}" != --stage2 ]; then
             echo "!! no Celeste.exe in $GAME -- see gamedata/README-FIRST.txt"
             exit 1
         fi
-        echo "-- handing off to appd so EmulationStation can be closed"
     } > "$LOG" 2>&1
     [ -f "$GAME/Celeste.exe" ] || exit 1
 
-    # The redirect is part of the command string on purpose. appd runs the app as
-    # `su -l -s /bin/sh player -c "<cmd>"` with stdout going to a tmpfs log under
-    # /dev/shm, which does not survive the power going off -- so the first attempt
-    # failed with nothing on the card to say why. Redirecting inside the string
-    # means even "not found" or "permission denied" from the shell itself is
-    # written to the card before our script gets a chance to run.
-    exec "$APPCTL" launch-application "$PORT/run.sh --stage2 >>$PORT/log.txt 2>&1"
+    # Closing EmulationStation is worth 100-200 MB on a 512 MB board, but only appd
+    # may do it: run.sh is started BY EmulationStation and lives in the launcher
+    # cgroup, so calling `appctl stop` here kills this script mid-launch.
+    #
+    # appd is not always up, though. On this device it was not running at all, so
+    # every launch-application died with "appd: daemon is not running" and nothing
+    # ever spawned -- which looked exactly like Celeste crashing on startup. So the
+    # daemon is used when present and skipped when not, rather than assumed.
+    #
+    # The redirect belongs inside the command string: appd runs the app with stdout
+    # pointed at a tmpfs log under /dev/shm, which does not survive a power cut.
+    if "$APPCTL" status 2>/dev/null | grep -q "appd: running"; then
+        echo "-- handing off to appd so EmulationStation can be closed" >> "$LOG"
+        exec "$APPCTL" launch-application "$PORT/run.sh --stage2 >>$PORT/log.txt 2>&1"
+    fi
+
+    echo "-- appd is not running; launching in place" >> "$LOG"
+    echo "   EmulationStation stays up, so ~150 MB less memory is available" >> "$LOG"
+    exec >> "$LOG" 2>&1
 fi
 
 # ---- stage 2: we are the application now --------------------------------
