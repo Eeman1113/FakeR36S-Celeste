@@ -17,15 +17,33 @@ already own Celeste.
    If you copy from a Mac, use  cp -X  (not plain cp) or the card fills with
    AppleDouble "._" stubs that FNA opens as content and chokes on.
 
-2. FMOD (armhf)
+2. FMOD (armhf) -- version 1.10.x, NOT the current one
    Celeste does all its audio through FMOD. Download "FMOD Engine" for Linux
    (free account) from:
        https://www.fmod.com/download
-   Pick version 2.00.x or 2.01.x -- Celeste expects the .so.10 ABI.
-   From the archive, copy these two into the port's  libs/  folder:
-       api/core/lib/arm/libfmod.so.10
+   You must pick a **1.10.x** build (1.10.22 is the last one), from the Legacy
+   section or the version selector. This is not a preference:
+
+     - FMOD's soname tracks its version one-for-one: 1.10 -> libfmod.so.10,
+       2.00 -> .so.11, ... 2.04 -> .so.15. Celeste dllmaps "fmod" to
+       libfmod.so.10, so only 1.10 satisfies it.
+     - Celeste's bindings are the 1.10 API. FMOD 2.04 is missing 25 of the 490
+       entry points Celeste imports, all of them the old parameter API
+       (SetParameterValue, GetParameterValue, TriggerCue, HasCue,
+       FMOD_SDL_Register). Celeste would die with EntryPointNotFoundException
+       as soon as audio started.
+     - FMOD_System_Create checks the version constant it is handed and returns
+       FMOD_ERR_HEADER_MISMATCH on a mismatch, so 2.x refuses before that.
+
+   From the 1.10 archive, copy these two into the port's libs/ folder, which
+   overwrites the silent stand-ins that ship there:
+       api/lowlevel/lib/arm/libfmod.so.10
        api/studio/lib/arm/libfmodstudio.so.10
-   "arm" is the 32-bit hard-float build. Do not take "arm64".
+   Note "lowlevel", not "core" -- 1.10 used that name, api/core/ is 2.x only.
+   And "arm", not "arm64": this board is 32-bit.
+
+   Until you do this, the port runs SILENTLY on the bundled stand-ins. That is
+   enough to find out whether the game renders and fits in memory.
 
 SPACE
    The full game is ~1.2 GB. If the card is tight, you can delete
