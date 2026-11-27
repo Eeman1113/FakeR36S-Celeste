@@ -97,11 +97,17 @@ cd "$GAME"
 # macOS leaves AppleDouble stubs on FAT32 cards and FNA opens them as content.
 find "$GAME" -name '._*' -delete 2>/dev/null || true
 
-echo "-- free memory with EmulationStation down:"
+# Hand back the page cache before a 1.1 GB content load. Harmless if it fails:
+# without appd, EmulationStation is still resident and we need every MB.
+sync
+doas sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
+
+echo "-- memory available at launch:"
 free -m 2>/dev/null | sed 's/^/   /'
 
 MONO_BIN=$(command -v mono-sgen || command -v mono)
 echo "-- mono: $MONO_BIN"
+echo "-- starting Celeste; if this is the last line, it died without a word"
 "$MONO_BIN" Celeste.exe "$@"
 RC=$?
 echo "-- Celeste exited rc=$RC"
