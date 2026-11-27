@@ -10,6 +10,16 @@ GAME="$PORT/gamedata"
 LOG="$PORT/log.txt"
 APPCTL=/usr/local/bin/appctl
 
+# The board has no RTC, so date() reports the same instant every boot and two runs
+# can produce byte-identical logs. A counter plus uptime makes each run tellable
+# apart. say() flushes as it goes because an abrupt power cut on FAT32 discards
+# whatever the filesystem has not committed, which is how a whole run's log was
+# lost once already.
+COUNT_FILE="$PORT/.runcount"
+RUN=$(( $(cat "$COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
+echo "$RUN" > "$COUNT_FILE" 2>/dev/null || true
+say() { echo "$@"; sync 2>/dev/null || true; }
+
 # ---- stage 1: hand off to appd ------------------------------------------
 # EmulationStation holds 100-200 MB, which matters a lot on a 512 MB board, but
 # this script cannot free it by itself: run.sh is started BY EmulationStation and
@@ -24,7 +34,7 @@ APPCTL=/usr/local/bin/appctl
 # there is nothing to restore on the way out either.
 if [ "${1:-}" != --stage2 ]; then
     {
-        echo "=== Celeste $(date) ==="
+        echo "=== Celeste run #$RUN  uptime=$(cut -d" " -f1 /proc/uptime 2>/dev/null)s  $(date) ==="
         if [ ! -f "$GAME/Celeste.exe" ]; then
             echo "!! no Celeste.exe in $GAME -- see gamedata/README-FIRST.txt"
             exit 1
@@ -44,19 +54,19 @@ if [ "${1:-}" != --stage2 ]; then
     # The redirect belongs inside the command string: appd runs the app with stdout
     # pointed at a tmpfs log under /dev/shm, which does not survive a power cut.
     if "$APPCTL" status 2>/dev/null | grep -q "appd: running"; then
-        echo "-- handing off to appd so EmulationStation can be closed" >> "$LOG"
+        say "-- handing off to appd so EmulationStation can be closed" >> "$LOG"
         exec "$APPCTL" launch-application "$PORT/run.sh --stage2 >>$PORT/log.txt 2>&1"
     fi
 
-    echo "-- appd is not running; launching in place" >> "$LOG"
+    say "-- appd is not running; launching in place" >> "$LOG"
     echo "   EmulationStation stays up, so ~150 MB less memory is available" >> "$LOG"
     exec >> "$LOG" 2>&1
 fi
 
 # ---- stage 2: we are the application now --------------------------------
 # stdout/stderr are already pointed at the card by the handoff above.
-echo "-- stage 2 alive: uid=$(id -u 2>/dev/null) pwd=$(pwd) shell=${0}"
-echo "-- running in the application cgroup"
+say "-- stage 2 alive: uid=$(id -u 2>/dev/null) pwd=$(pwd) shell=${0}"
+say "-- running in the application cgroup"
 
 # Full clocks. The battery-saver profile caps at 816 MHz, which is what froze
 # FCEUmm; Celeste on two Cortex-A7s has nothing to spare.
@@ -115,7 +125,7 @@ else
         [ -e "$f" ] || continue
         mv -f "$f" "$BCL_ASIDE/" 2>/dev/null && moved=$((moved + 1))
     done
-    [ "$moved" -gt 0 ] && echo "-- moved $moved bundled BCL assemblies aside; using Mono 6.8's own"
+    [ "$moved" -gt 0 ] && say "-- moved $moved bundled BCL assemblies aside; using Mono 6.8's own"
     # FNA.dll, FNA3D.dll, Celeste.exe and Celeste.Content.dll deliberately stay:
     # the native libFNA3D is pinned to the release that matches them.
 fi
@@ -128,15 +138,17 @@ find "$GAME" -name '._*' -delete 2>/dev/null || true
 sync
 doas sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null || true
 
-echo "-- memory available at launch:"
+say "-- memory available at launch:"
 free -m 2>/dev/null | sed 's/^/   /'
+sync 2>/dev/null || true
 
 MONO_BIN=$(command -v mono-sgen || command -v mono)
-echo "-- mono: $MONO_BIN"
-echo "-- starting Celeste; if this is the last line, it died without a word"
+say "-- mono: $MONO_BIN"
+say "-- starting Celeste; if this is the last line, it died without a word"
 "$MONO_BIN" Celeste.exe "$@"
 RC=$?
-echo "-- Celeste exited rc=$RC"
+say "-- Celeste exited rc=$RC"
+sync 2>/dev/null || true
 
 doas /usr/local/bin/cpuprofile normal 2>/dev/null || true
 # No appctl start here: appd's on_exit handler returns to the launcher by itself.
