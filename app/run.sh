@@ -56,7 +56,7 @@ fi
 # ---- stage 2: we are the application now --------------------------------
 # stdout/stderr are already pointed at the card by the handoff above.
 echo "-- stage 2 alive: uid=$(id -u 2>/dev/null) pwd=$(pwd) shell=${0}"
-echo "-- EmulationStation is down"
+echo "-- running in the application cgroup"
 
 # Full clocks. The battery-saver profile caps at 816 MHz, which is what froze
 # FCEUmm; Celeste on two Cortex-A7s has nothing to spare.
@@ -93,6 +93,32 @@ export XDG_DATA_HOME="$PORT/savedata"
 mkdir -p "$PORT/savedata/Celeste"
 
 cd "$GAME"
+
+# ---- the game's bundled BCL must not shadow the runtime's ----------------
+# Celeste ships the mscorlib and System.* it was packaged with in 2021. Mono 6.8
+# refuses them outright:
+#
+#   Corlib not in sync with this runtime: expected corlib string (ABB721D6-...)
+#   Loaded from: .../gamedata/mscorlib.dll
+#
+# MONO_PATH points at gamedata, so those win over the runtime's own unless they
+# are not there at all. Moved rather than deleted, so the player's copy survives
+# and CELESTE_BUNDLED_BCL=1 puts it back.
+BCL_ASIDE="$PORT/bcl-bundled"
+if [ "${CELESTE_BUNDLED_BCL:-0}" = 1 ]; then
+    [ -d "$BCL_ASIDE" ] && cp -a "$BCL_ASIDE/." "$GAME/" 2>/dev/null || true
+    echo "-- using the game's bundled BCL on request"
+else
+    mkdir -p "$BCL_ASIDE"
+    moved=0
+    for f in "$GAME"/mscorlib.dll "$GAME"/System*.dll "$GAME"/Mono.*.dll; do
+        [ -e "$f" ] || continue
+        mv -f "$f" "$BCL_ASIDE/" 2>/dev/null && moved=$((moved + 1))
+    done
+    [ "$moved" -gt 0 ] && echo "-- moved $moved bundled BCL assemblies aside; using Mono 6.8's own"
+    # FNA.dll, FNA3D.dll, Celeste.exe and Celeste.Content.dll deliberately stay:
+    # the native libFNA3D is pinned to the release that matches them.
+fi
 
 # macOS leaves AppleDouble stubs on FAT32 cards and FNA opens them as content.
 find "$GAME" -name '._*' -delete 2>/dev/null || true
