@@ -1,75 +1,67 @@
 #!/bin/sh
 # Celeste launcher for FakeR36S-OS.
 #
-# POSIX sh on purpose: the device has no bash and no python3, so none of the usual
-# PortMaster launcher idioms (${BASH_SOURCE[0]}, arrays, mount of a squashfs runtime)
-# are available here. Learned the hard way on the OMORI port.
+# POSIX sh on purpose: the device has no bash and no python3, so none of the
+# usual PortMaster launcher idioms are available here.
 set -u
 
 PORT=$(cd "$(dirname "$0")" && pwd)
 GAME="$PORT/gamedata"
 LOG="$PORT/log.txt"
+APPCTL=/usr/local/bin/appctl
 
-exec >"$LOG" 2>&1
-echo "=== Celeste $(date) ==="
-
-# ---- sanity: the player has to supply the game themselves ----------------
-if [ ! -f "$GAME/Celeste.exe" ]; then
-    echo "!! no Celeste.exe in $GAME"
-    echo "   Copy the DRM-free Linux build's game/ contents into gamedata/."
-    exit 1
+# ---- stage 1: hand off to appd ------------------------------------------
+# EmulationStation holds 100-200 MB, which matters a lot on a 512 MB board, but
+# this script cannot free it by itself: run.sh is started BY EmulationStation and
+# so lives in the launcher cgroup that `appctl stop` kills. Calling it from here
+# takes this script down mid-launch, which is exactly what happened -- the log
+# ended on "Stopping appd" and Celeste never started. appctl's own header warns
+# about this.
+#
+# The daemon is the only thing allowed to do that kill. launch-application asks
+# it to stop the launcher and start us again in the application cgroup, and when
+# the game exits its on_exit handler brings EmulationStation back unprompted, so
+# there is nothing to restore on the way out either.
+if [ "${CELESTE_STAGE:-1}" = 1 ]; then
+    {
+        echo "=== Celeste $(date) ==="
+        if [ ! -f "$GAME/Celeste.exe" ]; then
+            echo "!! no Celeste.exe in $GAME -- see gamedata/README-FIRST.txt"
+            exit 1
+        fi
+        echo "-- handing off to appd so EmulationStation can be closed"
+    } > "$LOG" 2>&1
+    [ -f "$GAME/Celeste.exe" ] || exit 1
+    exec "$APPCTL" launch-application "env CELESTE_STAGE=2 $PORT/run.sh"
 fi
-if [ ! -f "$PORT/libs/libfmod.so.10" ]; then
-    echo "!! no armhf libfmod.so.10 in $PORT/libs"
-    echo "   See gamedata/README-FIRST.txt -- FMOD's armhf blobs cannot be redistributed."
-    exit 1
-fi
 
-# ---- reclaim RAM: 512 MB total, and Celeste wants most of it -------------
-# EmulationStation holds 100-200 MB with gamelists loaded. appctl stops it cleanly
-# and the OS brings it back when we exit.
-if command -v appctl >/dev/null 2>&1; then
-    echo "-- stopping EmulationStation to free RAM"
-    appctl stop || true
-fi
+# ---- stage 2: we are the application now --------------------------------
+exec >> "$LOG" 2>&1
+echo "-- stage 2: running as the application, EmulationStation is down"
 
-# Full clocks. The battery-saver profile caps at 816 MHz, which is what froze FCEUmm;
-# Celeste on two Cortex-A7s has nothing to spare.
-command -v cpuprofile >/dev/null 2>&1 && cpuprofile max || true
+# Full clocks. The battery-saver profile caps at 816 MHz, which is what froze
+# FCEUmm; Celeste on two Cortex-A7s has nothing to spare.
+doas /usr/local/bin/cpuprofile max 2>/dev/null || true
 
-# Drop caches so the FMOD banks and texture atlases get a clean page cache.
-sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-
-# ---- runtime environment -------------------------------------------------
 MONODIR="$PORT/mono"
 export LD_LIBRARY_PATH="$PORT/libs:$MONODIR/lib:${LD_LIBRARY_PATH:-}"
 export PATH="$MONODIR/bin:$PATH"
 export MONO_PATH="$GAME"
-# Mono's own config tree, unpacked from the debs, rather than the game's monoconfig:
-# that file describes MonoKickstart's bundled layout, which we are not using. The
-# fmod/fmodstudio dllmaps Celeste actually needs live in Celeste.exe.config, which
-# the runtime picks up from beside the assembly without being told.
 export MONO_CFG_DIR="$MONODIR/etc"
 
-# Mono on a 2-core A7: the SGen nursery default (4 MB) thrashes; a smaller nursery
-# with more frequent, cheaper collections keeps frame times flatter.
+# Mono on two A7s: the default SGen nursery thrashes, so a smaller one with
+# cheaper, more frequent collections keeps frame times flatter.
 export MONO_GC_PARAMS="nursery-size=2m,soft-heap-limit=300m"
 export MONO_THREADS_PER_CPU=1
 
-# Renderer: FNA3D wants desktop GL 2.1. Lima can render it but the OS ships no
-# libGL.so.1 (Buildroot gates that behind a full X11 stack), so the port carries
-# gl4es as its own libGL and gl4es talks to the system GLES 2.0 underneath.
-# Deliberately NO FNA3D_OPENGL_FORCE_ES3: Lima has no GLES 3.0 at all.
+# Renderer: FNA3D wants desktop GL 2.1. Lima can draw it but the OS ships no
+# libGL.so.1, so the port carries gl4es and that talks to the system GLES 2.0.
+# Deliberately no FNA3D_OPENGL_FORCE_ES3: Lima has no GLES 3.0 at all.
 export FNA3D_OPENGL_FORCE_VBO_DISCARD=1
 export FNA3D_DISABLE_LATEBINDING=1
 export SDL_VIDEODRIVER=kmsdrm
 export SDL_AUDIODRIVER=alsa
 export SDL_VIDEO_GL_DRIVER="$PORT/libs/libGL.so.1"
-
-# gl4es tuning for Mali-400 (Utgard):
-#   ES=2/GL=21   present GL 2.1 over GLES 2.0
-#   NPOT=2       Utgard's non-power-of-two support is partial; let gl4es handle it
-#   NOINTOVLHACK keep it quiet and predictable rather than clever
 export LIBGL_ES=2
 export LIBGL_GL=21
 export LIBGL_NPOT=2
@@ -78,51 +70,23 @@ export LIBGL_BATCH=10
 export LIBGL_NOBANNER=1
 export LIBGL_SILENTSTUB=1
 
-# Saves live beside the port, not in a HOME that gets reflashed.
 export XDG_DATA_HOME="$PORT/savedata"
 mkdir -p "$PORT/savedata/Celeste"
 
 cd "$GAME"
 
-# ---- BCL: the runtime's own, not the game's --------------------------------
-# Celeste ships a MonoKickstart bundle: its own mscorlib and System.* assemblies
-# built for the Mono it was packaged with in 2021. We run Debian's Mono 6.8, and
-# mixing a 6.8 runtime with an older BCL is the known-bad combination -- the
-# working aarch64 port deletes those assemblies outright for the same reason.
-#
-# Moved aside rather than deleted, so nothing of the player's copy is destroyed and
-# CELESTE_BUNDLED_BCL=1 puts it back.
-BCL_ASIDE="$PORT/bcl-bundled"
-if [ "${CELESTE_BUNDLED_BCL:-0}" = "1" ]; then
-    if [ -d "$BCL_ASIDE" ]; then
-        echo "-- restoring the game's bundled BCL on request"
-        cp -a "$BCL_ASIDE/." "$GAME/" 2>/dev/null || true
-    fi
-else
-    if [ ! -d "$BCL_ASIDE" ]; then
-        echo "-- moving the game's bundled BCL aside, using Mono 6.8's own"
-        mkdir -p "$BCL_ASIDE"
-        for f in "$GAME"/System*.dll "$GAME"/mscorlib.dll "$GAME"/Mono.*.dll; do
-            [ -e "$f" ] || continue
-            mv "$f" "$BCL_ASIDE/" 2>/dev/null || true
-        done
-        # FNA.dll, FNA3D.dll, Celeste.exe and Celeste.Content.dll deliberately stay:
-        # the native libFNA3D is pinned to the release that matches them.
-    fi
-fi
-
-# macOS leaves AppleDouble stubs on FAT32 cards; FNA opens them as content and dies.
-# Same breakage that made the GBA ROMs show up as ">_".
+# macOS leaves AppleDouble stubs on FAT32 cards and FNA opens them as content.
 find "$GAME" -name '._*' -delete 2>/dev/null || true
+
+echo "-- free memory with EmulationStation down:"
+free -m 2>/dev/null | sed 's/^/   /'
 
 MONO_BIN=$(command -v mono-sgen || command -v mono)
 echo "-- mono: $MONO_BIN"
-echo "-- GL: $(command -v glxinfo >/dev/null 2>&1 && glxinfo -B 2>/dev/null | head -3 || echo 'glxinfo absent')"
-
 "$MONO_BIN" Celeste.exe "$@"
 RC=$?
 echo "-- Celeste exited rc=$RC"
 
-command -v cpuprofile >/dev/null 2>&1 && cpuprofile normal || true
-command -v appctl >/dev/null 2>&1 && appctl start || true
+doas /usr/local/bin/cpuprofile normal 2>/dev/null || true
+# No appctl start here: appd's on_exit handler returns to the launcher by itself.
 exit $RC
