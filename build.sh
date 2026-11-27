@@ -189,6 +189,12 @@ stage_package() {
              "$PKG/.local/share/applications" "$PKG/.local/share/icons"
 
     cp -a "$LIBS/." "$PORT/libs/"
+    # Celeste's own FMOD-to-SDL shim. Not part of FMOD, so even a real armhf
+    # libfmod lacks FMOD_SDL_Register and Celeste would throw on the P/Invoke.
+    cmake -S "$HERE/native/fmodstub" -B "$WORK/b-fmodsdl" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" -DCMAKE_BUILD_TYPE=Release >/dev/null
+    cmake --build "$WORK/b-fmodsdl" --target fmod_sdl_shim -j"$(nproc)" >/dev/null
+    cp "$WORK/b-fmodsdl/libfmod_SDL.so" "$PORT/libs/"
     cp -a "$WORK/stage/mono" "$PORT/mono"
     "${STRIP:-strip}" "$PORT"/libs/*.so* 2>/dev/null || true
 
