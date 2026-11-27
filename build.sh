@@ -152,6 +152,31 @@ stage_mono() {
     echo "    mono ok: $(ls "$MROOT"/lib/libmonosgen-2.0.so* | head -1 | xargs basename), mscorlib present"
 }
 
+# ---------------------------------------------------------------- FMOD stand-ins
+# Packaged separately, never inside the port: these produce no sound, and the real
+# armhf libfmod must be able to overwrite them without ceremony. They exist so the
+# port can be launched before an FMOD account is involved, which is what lets us
+# find out whether Celeste renders on Mali-400 and fits in 512 MB.
+stage_fmodstub() {
+    echo "==> silent FMOD stand-ins (armhf)"
+    cmake -S "$HERE/native/fmodstub" -B "$WORK/b-fmodstub" -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE="$HERE/toolchain-armhf.cmake" \
+        -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$WORK/b-fmodstub" -j"$(nproc)"
+    local SD="$WORK/stub/ports/celeste/libs"
+    rm -rf "$WORK/stub"; mkdir -p "$SD"
+    cp "$WORK/b-fmodstub/libfmod.so.10" "$WORK/b-fmodstub/libfmodstudio.so.10" "$SD/"
+    "${STRIP:-strip}" "$SD"/*.so.10 2>/dev/null || true
+    for so in libfmod.so.10 libfmodstudio.so.10; do
+        file "$SD/$so" | grep -q "ELF 32-bit.*ARM" \
+            || { echo "!! $so is not 32-bit ARM"; exit 1; }
+    done
+    cp "$HERE/native/fmodstub/README.md" "$WORK/stub/ports/celeste/libs/FMOD-STUB-README.md"
+    ( cd "$WORK/stub" && zip -qr "$OUT/celeste-fmod-stub-$VERSION.zip" . )
+    ( cd "$OUT" && sha256sum "celeste-fmod-stub-$VERSION.zip" > "celeste-fmod-stub-$VERSION.zip.sha256" )
+    echo "    $OUT/celeste-fmod-stub-$VERSION.zip  (SILENT -- no audio by design)"
+}
+
 # ---------------------------------------------------------------- package
 stage_package() {
     echo "==> packaging port v$VERSION"
@@ -182,8 +207,9 @@ case "${STAGE:-all}" in
     gl4es)   stage_gl4es ;;
     fna3d)   stage_fna3d ;;
     mono)    stage_mono ;;
+    fmodstub) stage_fmodstub ;;
     package) stage_package ;;
-    all)     stage_sdl2; stage_gl4es; stage_fna3d; stage_mono; stage_package ;;
+    all)     stage_sdl2; stage_gl4es; stage_fna3d; stage_mono; stage_package; stage_fmodstub ;;
     *)       echo "unknown STAGE=$STAGE"; exit 1 ;;
 esac
 echo "==> done"
